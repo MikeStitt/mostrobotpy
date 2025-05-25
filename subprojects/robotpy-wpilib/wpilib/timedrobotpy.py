@@ -98,7 +98,82 @@ class _Callback:
         return f"{{func={self.func.__name__}, _periodUs={self._periodUs}, expirationUs={self.expirationUs}}}"
 
 
-class _OrderedList:
+class _OrderedListSort:
+
+    __slots__ = "_data"
+
+    def __init__(self) -> None:
+        self._data: list[Any] = []
+
+    def add(self, item: Any) -> None:
+        self._data.append(item)
+        self._data.sort()
+
+    def pop(self) -> Any:
+        return self._data.pop()
+
+    def peek(
+        self,
+    ) -> Any:  # todo change to Any | None when we don't build with python 3.9
+        if self._data:
+            return self._data[0]
+        else:
+            return None
+
+    def reorderListAfterAChangeInTheFirstElement(self):
+        self._data.sort()
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __iter__(self) -> Iterable[Any]:
+        return iter(sorted(self._data))
+
+    def __contains__(self, item) -> bool:
+        return item in self._data
+
+    def __repr__(self) -> str:
+        return str(sorted(self._data))
+
+
+class _OrderedListMin:
+
+    __slots__ = "_data"
+
+    def __init__(self) -> None:
+        self._data: list[Any] = []
+
+    def add(self, item: Any) -> None:
+        self._data.append(item)
+
+    # def pop(self) -> Any:
+    #    return self._data.pop()
+
+    def peek(
+        self,
+    ) -> Any:  # todo change to Any | None when we don't build with python 3.9
+        if self._data:
+            return min(self._data)
+        else:
+            return None
+
+    def reorderListAfterAChangeInTheFirstElement(self):
+        pass
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __iter__(self) -> Iterable[Any]:
+        return iter(sorted(self._data))
+
+    def __contains__(self, item) -> bool:
+        return item in self._data
+
+    def __repr__(self) -> str:
+        return str(sorted(self._data))
+
+
+class _OrderedListHeapq:
 
     __slots__ = "_data"
 
@@ -162,7 +237,7 @@ class TimedRobotPy(IterativeRobotPy):
         # All periodic functions created by addPeriodic are relative
         # to this self._startTimeUs
         self._startTimeUs = _getFPGATime()
-        self._callbacks = _OrderedList()
+        self._callbacks = _OrderedListSort()
         self._loopStartTimeUs = 0
         self.addPeriodic(self._loopFunc, period=self._periodS)
 
@@ -236,19 +311,21 @@ class TimedRobotPy(IterativeRobotPy):
 
                 # self._loopStartTimeUs = startTimeUs # Uncomment this line for legacy behavior.
 
-                self._runCallbackAtHeadOfListAndReschedule()
+                self._runCallbackAtHeadOfListAndReschedule(callback)
 
                 # Process all other callbacks that are ready to run
                 # Changing the comparison to be _getFPGATime() rather than
                 # self._loopStartTimeUs would also be correct.
-                while self._callbacks.peek().expirationUs <= self._loopStartTimeUs:
-                    self._runCallbackAtHeadOfListAndReschedule()
+                while (
+                    callback := self._callbacks.peek()
+                ).expirationUs <= _getFPGATime():
+                    self._runCallbackAtHeadOfListAndReschedule(callback)
         finally:
             # pytests hang on PC when we don't force a call to self._stopNotifier()
             self._stopNotifier()
 
-    def _runCallbackAtHeadOfListAndReschedule(self) -> None:
-        callback = self._callbacks.peek()
+    def _runCallbackAtHeadOfListAndReschedule(self, callback) -> None:
+        # callback = self._callbacks.peek()
         # The callback.func() may have added more callbacks to self._callbacks,
         # but each is sorted by the _getFPGATime() at the moment it is
         # created, which is greater than self.expirationUs of this callback,
