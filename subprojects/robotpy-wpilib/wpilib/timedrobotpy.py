@@ -1,3 +1,5 @@
+import traceback
+from sys import argv
 from typing import Any, Callable, Iterable, ClassVar
 from heapq import heappush, heappop, _siftup
 from hal import (
@@ -24,8 +26,6 @@ microsecondsAsInt = int
 
 
 class _Callback:
-
-    __slots__ = "func", "_periodUs", "expirationUs"
 
     def __init__(
         self,
@@ -100,8 +100,6 @@ class _Callback:
 
 class _OrderedListSort:
 
-    __slots__ = "_data"
-
     def __init__(self) -> None:
         self._data: list[Any] = []
 
@@ -109,12 +107,7 @@ class _OrderedListSort:
         self._data.append(item)
         self._data.sort()
 
-    def pop(self) -> Any:
-        return self._data.pop()
-
-    def peek(
-        self,
-    ) -> Any:  # todo change to Any | None when we don't build with python 3.9
+    def peek(self) -> Any:
         if self._data:
             return self._data[0]
         else:
@@ -138,20 +131,13 @@ class _OrderedListSort:
 
 class _OrderedListMin:
 
-    __slots__ = "_data"
-
     def __init__(self) -> None:
         self._data: list[Any] = []
 
     def add(self, item: Any) -> None:
         self._data.append(item)
 
-    # def pop(self) -> Any:
-    #    return self._data.pop()
-
-    def peek(
-        self,
-    ) -> Any:  # todo change to Any | None when we don't build with python 3.9
+    def peek(self) -> Any:
         if self._data:
             return min(self._data)
         else:
@@ -175,24 +161,14 @@ class _OrderedListMin:
 
 class _OrderedListHeapq:
 
-    __slots__ = "_data"
-
     def __init__(self) -> None:
         self._data: list[Any] = []
 
     def add(self, item: Any) -> None:
         heappush(self._data, item)
 
-    def pop(self) -> Any:
-        return heappop(self._data)
-
-    def peek(
-        self,
-    ) -> Any:  # todo change to Any | None when we don't build with python 3.9
-        if self._data:
-            return self._data[0]
-        else:
-            return None
+    def peek(self) -> Any:
+       return self._data[0]
 
     def reorderListAfterAChangeInTheFirstElement(self):
         _siftup(self._data, 0)
@@ -209,9 +185,23 @@ class _OrderedListHeapq:
     def __repr__(self) -> str:
         return str(sorted(self._data))
 
+# Hooks to use timeit to evaluate configurations of TimedRobotPy
+_OrderedList = _OrderedListSort
+_initializeNotifier = initializeNotifier
+_setNotifierName = setNotifierName
+_observeUserProgramStarting = observeUserProgramStarting
+_updateNotifierAlarm = updateNotifierAlarm
+_waitForNotifierAlarm = waitForNotifierAlarm
+_stopNotifier = stopNotifier
+_report = report
+_IterativeRobotPy = IterativeRobotPy
+if '_IterativeRobotPyIsObject' in argv:
+    print("_IterativeRobotPyIsObject")
+    _IterativeRobotPy = object
+
 
 # todo what should the name of this class be?
-class TimedRobotPy(IterativeRobotPy):
+class TimedRobotPy(_IterativeRobotPy):
     """
     TimedRobotPy implements the IterativeRobotBase robot program framework.
 
@@ -232,26 +222,30 @@ class TimedRobotPy(IterativeRobotPy):
 
         :param period: period of the main robot periodic loop in seconds.
         """
-        super().__init__(period)
+        if "_IterativeRobotPyIsObject" in argv:
+            super().__init__()
+            self._periodS = period
+        else:
+            super().__init__(period)
 
         # All periodic functions created by addPeriodic are relative
         # to this self._startTimeUs
         self._startTimeUs = _getFPGATime()
-        self._callbacks = _OrderedListSort()
+        self._callbacks = _OrderedList()
         self._loopStartTimeUs = 0
         self.addPeriodic(self._loopFunc, period=self._periodS)
 
-        self._notifier, status = initializeNotifier()
+        self._notifier, status = _initializeNotifier()
         if status != 0:
             raise RuntimeError(
                 f"initializeNotifier() returned {self._notifier}, {status}"
             )
 
-        status = setNotifierName(self._notifier, "TimedRobotPy")
+        status = _setNotifierName(self._notifier, "TimedRobotPy")
         if status != 0:
             raise RuntimeError(f"setNotifierName() returned {status}")
 
-        report(_kResourceType_Framework, _kFramework_Timed)
+        _report(_kResourceType_Framework, _kFramework_Timed)
 
     def startCompetition(self) -> None:
         """
@@ -265,67 +259,88 @@ class TimedRobotPy(IterativeRobotPy):
 
             # Tell the DS that the robot is ready to be enabled
             print("********** Robot program startup complete **********", flush=True)
-            observeUserProgramStarting()
+            _observeUserProgramStarting()
 
             # Loop forever, calling the appropriate mode-dependent function
-            # (really not forever, there is a check for a break)
-            while True:
-                #  We don't have to check there's an element in the queue first because
-                #  there's always at least one (the constructor adds one). It's re-enqueued
-                #  at the end of the loop.
-                callback = self._callbacks.peek()
+            # (really not forever, there is a check for a stop)
+            while self._bodyOfMainLoop():
+                pass
+            print("Reached after while self._bodyOfMainLoop(): ", flush=True)
+ 
+        except Exception as e:
+            # Print the exception type and message
+            print(f"Exception caught: {type(e).__name__}: {e}")
 
-                status = updateNotifierAlarm(self._notifier, callback.expirationUs)
-                if status != 0:
-                    raise RuntimeError(f"updateNotifierAlarm() returned {status}")
+            # Print the stack trace
+            print("Stack trace:")
+            traceback.print_exc()
 
-                self._loopStartTimeUs, status = waitForNotifierAlarm(self._notifier)
+            # Alternatively, get the formatted traceback as a string:
+            # formatted_traceback = traceback.format_exc()
+            # print(formatted_traceback)
 
-                # The C++ code that this was based upon used the following line to establish
-                # the loopStart time. Uncomment it and
-                # the "self._loopStartTimeUs = startTimeUs" further below to emulate the
-                # legacy behavior.
-                # startTimeUs = _getFPGATime() # uncomment this for legacy behavior
+            # Rethrow the exception to propagate it up the call stack
+            raise
 
-                if status != 0:
-                    raise RuntimeError(
-                        f"waitForNotifierAlarm() returned _loopStartTimeUs={self._loopStartTimeUs} status={status}"
-                    )
-
-                if self._loopStartTimeUs == 0:
-                    # when HAL_StopNotifier(self.notifier) is called the above waitForNotifierAlarm
-                    # will return a _loopStartTimeUs==0 and the API requires robots to stop any loops.
-                    # See the API for waitForNotifierAlarm
-                    break
-
-                # On a RoboRio 2, the following print statement results in values like:
-                # print(f"expUs={callback.expirationUs} current={self._loopStartTimeUs}, legacy={startTimeUs}")
-                # [2.27] expUs=3418017 current=3418078, legacy=3418152
-                # [2.29] expUs=3438017 current=3438075, legacy=3438149
-                # This indicates that there is about 60 microseconds of skid from
-                # callback.expirationUs to self._loopStartTimeUs
-                # and there is about 70 microseconds of skid from self._loopStartTimeUs to startTimeUs.
-                # Consequently, this code uses "self._loopStartTimeUs, status = waitForNotifierAlarm"
-                # to establish loopStartTime, rather than slowing down the code by adding an extra call to
-                # "startTimeUs = _getFPGATime()".
-
-                # self._loopStartTimeUs = startTimeUs # Uncomment this line for legacy behavior.
-
-                self._runCallbackAtHeadOfListAndReschedule(callback)
-
-                # Process all other callbacks that are ready to run
-                # Changing the comparison to be _getFPGATime() rather than
-                # self._loopStartTimeUs would also be correct.
-                while (
-                    callback := self._callbacks.peek()
-                ).expirationUs <= _getFPGATime():
-                    self._runCallbackAtHeadOfListAndReschedule(callback)
         finally:
+            print("Reached after finally: self._stopNotifier(): ", flush=True)
             # pytests hang on PC when we don't force a call to self._stopNotifier()
             self._stopNotifier()
 
+    def _bodyOfMainLoop(self) -> bool:
+        keepGoing = True
+        #  We don't have to check there's an element in the queue first because
+        #  there's always at least one (the constructor adds one).
+        callback = self._callbacks.peek()
+
+        status = _updateNotifierAlarm(self._notifier, callback.expirationUs)
+        if status != 0:
+            raise RuntimeError(f"updateNotifierAlarm() returned {status}")
+
+        self._loopStartTimeUs, status = _waitForNotifierAlarm(self._notifier)
+
+        # The C++ code that this was based upon used the following line to establish
+        # the loopStart time. Uncomment it and
+        # the "self._loopStartTimeUs = startTimeUs" further below to emulate the
+        # legacy behavior.
+        # startTimeUs = _getFPGATime() # uncomment this for legacy behavior
+
+        if status != 0:
+            raise RuntimeError(
+                f"waitForNotifierAlarm() returned _loopStartTimeUs={self._loopStartTimeUs} status={status}"
+            )
+
+        if self._loopStartTimeUs == 0:
+            # when HAL_StopNotifier(self.notifier) is called the above waitForNotifierAlarm
+            # will return a _loopStartTimeUs==0 and the API requires robots to stop any loops.
+            # See the API for waitForNotifierAlarm
+            keepGoing = False
+            return keepGoing
+
+        # On a RoboRio 2, the following print statement results in values like:
+        # print(f"expUs={callback.expirationUs} current={self._loopStartTimeUs}, legacy={startTimeUs}")
+        # [2.27] expUs=3418017 current=3418078, legacy=3418152
+        # [2.29] expUs=3438017 current=3438075, legacy=3438149
+        # This indicates that there is about 60 microseconds of skid from
+        # callback.expirationUs to self._loopStartTimeUs
+        # and there is about 70 microseconds of skid from self._loopStartTimeUs to startTimeUs.
+        # Consequently, this code uses "self._loopStartTimeUs, status = waitForNotifierAlarm"
+        # to establish loopStartTime, rather than slowing down the code by adding an extra call to
+        # "startTimeUs = _getFPGATime()".
+
+        # self._loopStartTimeUs = startTimeUs # Uncomment this line for legacy behavior.
+
+        self._runCallbackAtHeadOfListAndReschedule(callback)
+
+        # Process all other callbacks that are ready to run
+        # Changing the comparison to be _getFPGATime() rather than
+        # self._loopStartTimeUs would also be correct.
+        while (
+                callback := self._callbacks.peek()
+        ).expirationUs <= _getFPGATime():
+            self._runCallbackAtHeadOfListAndReschedule(callback)
+
     def _runCallbackAtHeadOfListAndReschedule(self, callback) -> None:
-        # callback = self._callbacks.peek()
         # The callback.func() may have added more callbacks to self._callbacks,
         # but each is sorted by the _getFPGATime() at the moment it is
         # created, which is greater than self.expirationUs of this callback,
@@ -346,7 +361,7 @@ class TimedRobotPy(IterativeRobotPy):
         self._callbacks.reorderListAfterAChangeInTheFirstElement()
 
     def _stopNotifier(self):
-        stopNotifier(self._notifier)
+        _stopNotifier(self._notifier)
 
     def endCompetition(self) -> None:
         """

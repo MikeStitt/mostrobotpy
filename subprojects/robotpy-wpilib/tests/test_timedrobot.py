@@ -101,13 +101,16 @@ class TestController:
             self._robotStarted = True
             self._cond.notify_all()
 
-        with self._reraise(catch=True):
+        with self._reraise(catch=False): # todo put me back: self._reraise(catch=True):
             assert robot is not None  # shouldn't happen...
 
             robot._TestRobot__robotInitStarted = self._onRobotInitStarted
 
             try:
+                print("about to:robot.startCompetition()",flush=True)
                 robot.startCompetition()
+                print("after robot.startCompetition()",flush=True)
+                print(f"reached self._expectFinished {self._expectFinished} == self._robotFinished {self._robotFinished}", flush=True)
                 assert self._expectFinished == self._robotFinished
             finally:
                 del robot
@@ -144,6 +147,7 @@ class TestController:
             # in this block you should tell the sim to do sim things
             yield
         finally:
+            print("Reached self._robotFinished", flush=True)
             self._robotFinished = True
             robot.endCompetition()
 
