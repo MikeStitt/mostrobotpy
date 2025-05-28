@@ -109,9 +109,7 @@ class TestController:
             robot._TestRobot__robotInitStarted = self._onRobotInitStarted
 
             try:
-                print("about to:robot.startCompetition()",flush=True)
                 robot.startCompetition()
-                print("after robot.startCompetition()",flush=True)
                 self._startCompetitionReturned = True
 
             except Exception as e:
@@ -180,7 +178,6 @@ class TestController:
             # Rethrow the exception to propagate it up the call stack
             raise
         finally:
-            print("Reached self._robotFinished", flush=True)
             self._robotFinished = True
             robot.endCompetition()
 
@@ -209,15 +206,11 @@ class TestController:
             pytest.fail("robot did not exit within 2 seconds")
 
         if not self._expectFinished:
-            print(f"not self._expectFinished: self._reraise.exception={self._reraise.exception}")
             assert type(self._reraise.reset()) is AssertionError
 
         self._thread = None
 
-        #TODO the test harness captures the expected exceptions and does not raise them
-        # so expected failures causes self._startCompetitionReturned even though they
-        # would not outside of the test harness.
-        #assert self._expectFinished == self._startCompetitionReturned
+        assert self._expectFinished == self._startCompetitionReturned
 
     @property
     def robotIsAlive(self) -> bool:

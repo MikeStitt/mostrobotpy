@@ -1,4 +1,3 @@
-import traceback
 from sys import argv
 from typing import Any, Callable, Iterable, ClassVar
 from heapq import heappush, heappop, _siftup
@@ -260,7 +259,6 @@ class TimedRobotPy(_IterativeRobotPy):
             while self._bodyOfMainLoop():
                 pass
         finally:
-            print("Reached after finally: self._stopNotifier(): ", flush=True)
             # pytests hang on PC when we don't force a call to self._stopNotifier()
             self._stopNotifier()
 
