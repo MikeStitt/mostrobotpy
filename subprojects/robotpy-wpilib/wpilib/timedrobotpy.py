@@ -179,9 +179,23 @@ class _OrderedListHeapq:
     def __repr__(self) -> str:
         return str(sorted(self._data))
 
+# Hooks to use timeit to evaluate configurations of TimedRobotPy
+_OrderedList = _OrderedListSort
+_initializeNotifier = initializeNotifier
+_setNotifierName = setNotifierName
+_observeUserProgramStarting = observeUserProgramStarting
+_updateNotifierAlarm = updateNotifierAlarm
+_waitForNotifierAlarm = waitForNotifierAlarm
+_stopNotifier = stopNotifier
+_report = report
+_IterativeRobotPy = IterativeRobotPy
+if '_IterativeRobotPyIsObject' in argv:
+    print("_IterativeRobotPyIsObject")
+    _IterativeRobotPy = object
+
 
 # todo what should the name of this class be?
-class TimedRobotPy(IterativeRobotPy):
+class TimedRobotPy(_IterativeRobotPy):
     """
     TimedRobotPy implements the IterativeRobotBase robot program framework.
 
@@ -202,26 +216,30 @@ class TimedRobotPy(IterativeRobotPy):
 
         :param period: period of the main robot periodic loop in seconds.
         """
-        super().__init__(period)
+        if "_IterativeRobotPyIsObject" in argv:
+            super().__init__()
+            self._periodS = period
+        else:
+            super().__init__(period)
 
         # All periodic functions created by addPeriodic are relative
         # to this self._startTimeUs
         self._startTimeUs = _getFPGATime()
-        self._callbacks = _OrderedListSort()
+        self._callbacks = _OrderedList()
         self._loopStartTimeUs = 0
         self.addPeriodic(self._loopFunc, period=self._periodS)
 
-        self._notifier, status = initializeNotifier()
+        self._notifier, status = _initializeNotifier()
         if status != 0:
             raise RuntimeError(
                 f"initializeNotifier() returned {self._notifier}, {status}"
             )
 
-        status = setNotifierName(self._notifier, "TimedRobotPy")
+        status = _setNotifierName(self._notifier, "TimedRobotPy")
         if status != 0:
             raise RuntimeError(f"setNotifierName() returned {status}")
 
-        report(_kResourceType_Framework, _kFramework_Timed)
+        _report(_kResourceType_Framework, _kFramework_Timed)
 
     def startCompetition(self) -> None:
         """
@@ -235,14 +253,12 @@ class TimedRobotPy(IterativeRobotPy):
 
             # Tell the DS that the robot is ready to be enabled
             print("********** Robot program startup complete **********", flush=True)
-            observeUserProgramStarting()
+            _observeUserProgramStarting()
 
             # Loop forever, calling the appropriate mode-dependent function
             # (really not forever, there is a check for a stop)
             while self._bodyOfMainLoop():
                 pass
-            print("Reached after while self._bodyOfMainLoop(): ", flush=True)
-
         finally:
             print("Reached after finally: self._stopNotifier(): ", flush=True)
             # pytests hang on PC when we don't force a call to self._stopNotifier()
@@ -254,11 +270,11 @@ class TimedRobotPy(IterativeRobotPy):
         #  there's always at least one (the constructor adds one).
         callback = self._callbacks.peek()
 
-        status = updateNotifierAlarm(self._notifier, callback.expirationUs)
+        status = _updateNotifierAlarm(self._notifier, callback.expirationUs)
         if status != 0:
             raise RuntimeError(f"updateNotifierAlarm() returned {status}")
 
-        self._loopStartTimeUs, status = waitForNotifierAlarm(self._notifier)
+        self._loopStartTimeUs, status = _waitForNotifierAlarm(self._notifier)
 
         # The C++ code that this was based upon used the following line to establish
         # the loopStart time. Uncomment it and
@@ -324,7 +340,7 @@ class TimedRobotPy(IterativeRobotPy):
         self._callbacks.reorderListAfterAChangeInTheFirstElement()
 
     def _stopNotifier(self):
-        stopNotifier(self._notifier)
+        _stopNotifier(self._notifier)
 
     def endCompetition(self) -> None:
         """

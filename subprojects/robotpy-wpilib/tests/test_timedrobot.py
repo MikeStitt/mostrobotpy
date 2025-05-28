@@ -109,6 +109,7 @@ class TestController:
             robot._TestRobot__robotInitStarted = self._onRobotInitStarted
 
             try:
+                print("about to:robot.startCompetition()",flush=True)
                 robot.startCompetition()
                 print("after robot.startCompetition()",flush=True)
                 self._startCompetitionReturned = True
