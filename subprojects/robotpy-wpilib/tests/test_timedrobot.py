@@ -13,6 +13,7 @@ from enum import Enum
 import gc
 import pytest
 import threading
+import traceback
 import typing
 import weakref
 
@@ -90,6 +91,7 @@ class TestController:
         self._robotStarted = False
         self._robotInitStarted = False
         self._robotFinished = False
+        self._startCompetitionReturned = False
 
     def _onRobotInitStarted(self) -> None:
         with self._cond:
@@ -101,14 +103,31 @@ class TestController:
             self._robotStarted = True
             self._cond.notify_all()
 
-        with self._reraise(catch=True):
+        with self._reraise:
             assert robot is not None  # shouldn't happen...
 
             robot._TestRobot__robotInitStarted = self._onRobotInitStarted
 
             try:
                 robot.startCompetition()
-                assert self._expectFinished == self._robotFinished
+                print("after robot.startCompetition()",flush=True)
+                self._startCompetitionReturned = True
+
+            except Exception as e:
+                # Print the exception type and message
+                print(f"Exception caught: {type(e).__name__}: {e}")
+
+                # Print the stack trace
+                print("Stack trace:")
+                traceback.print_exc()
+
+                # Alternatively, get the formatted traceback as a string:
+                # formatted_traceback = traceback.format_exc()
+                # print(formatted_traceback)
+
+                # Rethrow the exception to propagate it up the call stack
+                raise
+
             finally:
                 del robot
 
@@ -144,6 +163,7 @@ class TestController:
             # in this block you should tell the sim to do sim things
             yield
         finally:
+            print("Reached self._robotFinished", flush=True)
             self._robotFinished = True
             robot.endCompetition()
 
@@ -172,6 +192,11 @@ class TestController:
             pytest.fail("robot did not exit within 2 seconds")
 
         self._thread = None
+
+        #TODO the test harness captures the expected exceptions and does not raise them
+        # so expected failures causes self._startCompetitionReturned even though they
+        # would not outside of the test harness.
+        #assert self._expectFinished == self._startCompetitionReturned
 
     @property
     def robotIsAlive(self) -> bool:
@@ -221,6 +246,8 @@ class TestController:
             DriverStationSim.notifyNewData()
             stepTiming(0.001)
             if assert_alive and self._expectFinished:
+                if not self.robotIsAlive:
+                    print("not self.robotIsAlive", flush=True)
                 assert self.robotIsAlive
             tm += 0.001
 
@@ -341,8 +368,32 @@ class TimedRobotPyExpectsException(TimedRobotPy):
             super().startCompetition()
         except AssertionError:
             hasAssertionError = True
-        print(f"TimedRobotPyExpectsException hasAssertionError={hasAssertionError}")
-        assert hasAssertionError
+            #raise
+
+            # TODO xyzzy The general concept is to change this so that exceptions are raised,
+            # they propagate outside of this thread to calling thread and at the
+            # calling thread confirm that we caught the exception.
+
+        except Exception as e:
+            # Print the exception type and message
+            print(f"Exception caught: {type(e).__name__}: {e}")
+
+            # Print the stack trace
+            print("Stack trace:")
+            traceback.print_exc()
+
+            # Alternatively, get the formatted traceback as a string:
+            # formatted_traceback = traceback.format_exc()
+            # print(formatted_traceback)
+
+            # Rethrow the exception to propagate it up the call stack
+            raise
+
+        finally:
+            print(f"TimedRobotPyExpectsException hasAssertionError={hasAssertionError}")
+            assert hasAssertionError
+
+
 
 
 class TimedRobotPyDoNotExpectException(TimedRobotPy):
@@ -357,8 +408,25 @@ class TimedRobotPyDoNotExpectException(TimedRobotPy):
             super().startCompetition()
         except AssertionError:
             hasAssertionError = True
-        print(f"TimedRobotPyExpectsException hasAssertionError={hasAssertionError}")
-        assert not hasAssertionError
+            #raise
+        except Exception as e:
+            # Print the exception type and message
+            print(f"Exception caught: {type(e).__name__}: {e}")
+
+            # Print the stack trace
+            print("Stack trace:")
+            traceback.print_exc()
+
+            # Alternatively, get the formatted traceback as a string:
+            # formatted_traceback = traceback.format_exc()
+            # print(formatted_traceback)
+
+            # Rethrow the exception to propagate it up the call stack
+            raise
+
+        finally:
+            print(f"TimedRobotPyExpectsException hasAssertionError={hasAssertionError}")
+            assert not hasAssertionError
 
 
 def getFPGATimeInSecondsAsStr():
@@ -614,6 +682,10 @@ def call_sequence_str(
 @pytest.mark.parametrize(
     "myRobotAddMethods, timedRobotExpectation, _expectFinished, _robotMode, _callSequenceStr",
     [
+        # todo xyzzy, the general concept is to change this to a single class object
+        # that has all of the configuration parameters, so that we only need to set the
+        # ones that we care about for each test case.
+        # todo add a description string of the test too.
         (
             MyRobotDefaultPass,
             TimedRobotPyDoNotExpectException,
