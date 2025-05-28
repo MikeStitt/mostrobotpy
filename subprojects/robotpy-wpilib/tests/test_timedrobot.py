@@ -376,7 +376,9 @@ class TimedRobotPyExpectsException(TimedRobotPy):
             hasAssertionError = True
 
             # Print the exception type and message
-            print(f"TimedRobotPyExpectsException AssertionError: Exception caught: {type(e).__name__}: {e}")
+            print(
+                f"TimedRobotPyExpectsException AssertionError: Exception caught: {type(e).__name__}: {e}"
+            )
 
             if False:
                 # Print the stack trace
@@ -388,7 +390,9 @@ class TimedRobotPyExpectsException(TimedRobotPy):
 
         except Exception as e:
             # Print the exception type and message
-            print(f"TimedRobotPyExpectsException Exception caught: {type(e).__name__}: {e}")
+            print(
+                f"TimedRobotPyExpectsException Exception caught: {type(e).__name__}: {e}"
+            )
 
             # Print the stack trace
             print("Stack trace:")
@@ -400,8 +404,6 @@ class TimedRobotPyExpectsException(TimedRobotPy):
         finally:
             print(f"TimedRobotPyExpectsException hasAssertionError={hasAssertionError}")
             assert hasAssertionError
-
-
 
 
 class TimedRobotPyDoNotExpectException(TimedRobotPy):
@@ -608,6 +610,7 @@ class MyRobotTestExitFails(MyRobotDefaultPass):
     def testExit(self):
         assert False
 
+
 class MyRobotSimulationInitFails(MyRobotDefaultPass):
     @printEntryAndExit
     def _simulationInit(self):
@@ -618,7 +621,6 @@ class MyRobotSimulationPeriodicFails(MyRobotDefaultPass):
     @printEntryAndExit
     def _simulationPeriodic(self):
         assert False
-
 
 
 class ExpectFinished(Enum):
@@ -650,9 +652,12 @@ class RobotMode(Enum):
 
 
 from dataclasses import dataclass, field
+
+
 @dataclass()
 class CaseConfiguration:
     """Class for configuration of Test Cases"""
+
     description: str
     myRobotAddMethods: type
     timedRobotExpectation: TimedRobotPy
@@ -673,7 +678,9 @@ def myrobot_class(
     print(f"expectFinished={caseConfiguration.expectFinished}")
     print(f"callSequenceStr={caseConfiguration.callSequenceStr}\n\n")
 
-    class MyRobot(caseConfiguration.myRobotAddMethods, caseConfiguration.timedRobotExpectation):
+    class MyRobot(
+        caseConfiguration.myRobotAddMethods, caseConfiguration.timedRobotExpectation
+    ):
 
         @printEntryAndExit
         def startCompetition(self):
@@ -692,13 +699,14 @@ def expect_finished(caseConfiguration) -> bool:
 
 
 @pytest.fixture(scope="function")
-def robot_mode_fixture(caseConfiguration)-> RobotMode:
+def robot_mode_fixture(caseConfiguration) -> RobotMode:
     return caseConfiguration.robotMode
 
 
 @pytest.fixture(scope="function")
 def call_sequence_str(caseConfiguration) -> str:
     return caseConfiguration.callSequenceStr
+
 
 @pytest.mark.filterwarnings("ignore:Exception in thread")
 @pytest.mark.parametrize(
@@ -772,7 +780,7 @@ def call_sequence_str(caseConfiguration) -> str:
             expectFinished=ExpectFinished.kNotFinished,
             robotMode=RobotMode.kAutonomous,
             callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
-            ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:"
+            ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:",
         ),
         CaseConfiguration(
             description="Robot enters autonomous mode, exception in simulationPeriodic",
@@ -791,7 +799,7 @@ def call_sequence_str(caseConfiguration) -> str:
             expectFinished=ExpectFinished.kNotFinished,
             robotMode=RobotMode.kAutonomous,
             callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
-            ":disabledInit+:"
+            ":disabledInit+:",
         ),
         CaseConfiguration(
             description="Robot enters autonomous mode, exception in disabledPeriodic",
@@ -800,7 +808,7 @@ def call_sequence_str(caseConfiguration) -> str:
             expectFinished=ExpectFinished.kNotFinished,
             robotMode=RobotMode.kAutonomous,
             callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
-            ":disabledInit+:disabledInit-:disabledPeriodic+:"
+            ":disabledInit+:disabledInit-:disabledPeriodic+:",
         ),
         CaseConfiguration(
             description="Robot enters autonomous mode, exception in disabledExit",

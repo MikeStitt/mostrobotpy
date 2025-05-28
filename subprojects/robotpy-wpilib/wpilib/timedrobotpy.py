@@ -178,6 +178,7 @@ class _OrderedListHeapq:
     def __repr__(self) -> str:
         return str(sorted(self._data))
 
+
 # Hooks to use timeit to evaluate configurations of TimedRobotPy
 _OrderedList = _OrderedListMin
 _initializeNotifier = initializeNotifier
@@ -188,7 +189,7 @@ _waitForNotifierAlarm = waitForNotifierAlarm
 _stopNotifier = stopNotifier
 _report = report
 _IterativeRobotPy = IterativeRobotPy
-if '_IterativeRobotPyIsObject' in argv:
+if "_IterativeRobotPyIsObject" in argv:
     print("_IterativeRobotPyIsObject")
     _IterativeRobotPy = object
 
@@ -310,9 +311,7 @@ class TimedRobotPy(_IterativeRobotPy):
         # Process all other callbacks that are ready to run
         # Changing the comparison to be _getFPGATime() rather than
         # self._loopStartTimeUs would also be correct.
-        while (
-                callback := self._callbacks.peek()
-        ).expirationUs <= _getFPGATime():
+        while (callback := self._callbacks.peek()).expirationUs <= _getFPGATime():
             self._runCallbackAtHeadOfListAndReschedule(callback)
 
         return keepGoing
