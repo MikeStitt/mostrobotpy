@@ -121,11 +121,7 @@ class TestController:
                     print("Stack trace:")
                     traceback.print_exc()
 
-                    # Alternatively, get the formatted traceback as a string:
-                    # formatted_traceback = traceback.format_exc()
-                    # print(formatted_traceback)
-
-                    # Rethrow the exception to propagate it up the call stack
+                # Rethrow the exception to propagate it up the call stack
                 raise
 
             finally:
@@ -170,10 +166,6 @@ class TestController:
                 # Print the stack trace
                 print("Stack trace:")
                 traceback.print_exc()
-
-                # Alternatively, get the formatted traceback as a string:
-                # formatted_traceback = traceback.format_exc()
-                # print(formatted_traceback)
 
             # Rethrow the exception to propagate it up the call stack
             raise
@@ -391,10 +383,6 @@ class TimedRobotPyExpectsException(TimedRobotPy):
                 print("Stack trace:")
                 traceback.print_exc()
 
-                # Alternatively, get the formatted traceback as a string:
-                # formatted_traceback = traceback.format_exc()
-                # print(formatted_traceback)
-
             # Rethrow the exception to propagate it up the call stack
             raise
 
@@ -405,10 +393,6 @@ class TimedRobotPyExpectsException(TimedRobotPy):
             # Print the stack trace
             print("Stack trace:")
             traceback.print_exc()
-
-            # Alternatively, get the formatted traceback as a string:
-            # formatted_traceback = traceback.format_exc()
-            # print(formatted_traceback)
 
             # Rethrow the exception to propagate it up the call stack
             raise
@@ -439,10 +423,6 @@ class TimedRobotPyDoNotExpectException(TimedRobotPy):
             print("Stack trace:")
             traceback.print_exc()
 
-            # Alternatively, get the formatted traceback as a string:
-            # formatted_traceback = traceback.format_exc()
-            # print(formatted_traceback)
-
             # Rethrow the exception to propagate it up the call stack
             raise
         except Exception as e:
@@ -452,10 +432,6 @@ class TimedRobotPyDoNotExpectException(TimedRobotPy):
             # Print the stack trace
             print("Stack trace:")
             traceback.print_exc()
-
-            # Alternatively, get the formatted traceback as a string:
-            # formatted_traceback = traceback.format_exc()
-            # print(formatted_traceback)
 
             # Rethrow the exception to propagate it up the call stack
             raise

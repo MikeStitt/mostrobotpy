@@ -179,7 +179,7 @@ class _OrderedListHeapq:
         return str(sorted(self._data))
 
 # Hooks to use timeit to evaluate configurations of TimedRobotPy
-_OrderedList = _OrderedListSort
+_OrderedList = _OrderedListMin
 _initializeNotifier = initializeNotifier
 _setNotifierName = setNotifierName
 _observeUserProgramStarting = observeUserProgramStarting
