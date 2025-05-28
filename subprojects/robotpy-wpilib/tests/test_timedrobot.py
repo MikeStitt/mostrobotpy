@@ -13,6 +13,7 @@ from enum import Enum
 import gc
 import pytest
 import threading
+import traceback
 import typing
 import weakref
 
@@ -90,6 +91,7 @@ class TestController:
         self._robotStarted = False
         self._robotInitStarted = False
         self._robotFinished = False
+        self._startCompetitionReturned = False
 
     def _onRobotInitStarted(self) -> None:
         with self._cond:
@@ -101,14 +103,31 @@ class TestController:
             self._robotStarted = True
             self._cond.notify_all()
 
-        with self._reraise(catch=True):
+        with self._reraise(catch=False):
             assert robot is not None  # shouldn't happen...
 
             robot._TestRobot__robotInitStarted = self._onRobotInitStarted
 
             try:
                 robot.startCompetition()
-                assert self._expectFinished == self._robotFinished
+                self._startCompetitionReturned = True
+
+            except Exception as e:
+                # Print the exception type and message
+                print(f"_robotThread: Exception caught: {type(e).__name__}: {e}")
+
+                if self._expectFinished:
+                    # Print the stack trace
+                    print("Stack trace:")
+                    traceback.print_exc()
+
+                    # Alternatively, get the formatted traceback as a string:
+                    # formatted_traceback = traceback.format_exc()
+                    # print(formatted_traceback)
+
+                    # Rethrow the exception to propagate it up the call stack
+                raise
+
             finally:
                 del robot
 
@@ -143,6 +162,21 @@ class TestController:
         try:
             # in this block you should tell the sim to do sim things
             yield
+        except Exception as e:
+            # Print the exception type and message
+            print(f"runRobot: Exception caught: {type(e).__name__}: {e}")
+
+            if self._expectFinished:
+                # Print the stack trace
+                print("Stack trace:")
+                traceback.print_exc()
+
+                # Alternatively, get the formatted traceback as a string:
+                # formatted_traceback = traceback.format_exc()
+                # print(formatted_traceback)
+
+            # Rethrow the exception to propagate it up the call stack
+            raise
         finally:
             self._robotFinished = True
             robot.endCompetition()
@@ -171,7 +205,12 @@ class TestController:
         if th.is_alive():
             pytest.fail("robot did not exit within 2 seconds")
 
+        if not self._expectFinished:
+            assert type(self._reraise.reset()) is AssertionError
+
         self._thread = None
+
+        assert self._expectFinished == self._startCompetitionReturned
 
     @property
     def robotIsAlive(self) -> bool:
@@ -221,6 +260,8 @@ class TestController:
             DriverStationSim.notifyNewData()
             stepTiming(0.001)
             if assert_alive and self._expectFinished:
+                if not self.robotIsAlive:
+                    print("not self.robotIsAlive", flush=True)
                 assert self.robotIsAlive
             tm += 0.001
 
@@ -339,10 +380,44 @@ class TimedRobotPyExpectsException(TimedRobotPy):
         hasAssertionError = False
         try:
             super().startCompetition()
-        except AssertionError:
+        except AssertionError as e:
             hasAssertionError = True
-        print(f"TimedRobotPyExpectsException hasAssertionError={hasAssertionError}")
-        assert hasAssertionError
+
+            # Print the exception type and message
+            print(f"TimedRobotPyExpectsException AssertionError: Exception caught: {type(e).__name__}: {e}")
+
+            if False:
+                # Print the stack trace
+                print("Stack trace:")
+                traceback.print_exc()
+
+                # Alternatively, get the formatted traceback as a string:
+                # formatted_traceback = traceback.format_exc()
+                # print(formatted_traceback)
+
+            # Rethrow the exception to propagate it up the call stack
+            raise
+
+        except Exception as e:
+            # Print the exception type and message
+            print(f"TimedRobotPyExpectsException Exception caught: {type(e).__name__}: {e}")
+
+            # Print the stack trace
+            print("Stack trace:")
+            traceback.print_exc()
+
+            # Alternatively, get the formatted traceback as a string:
+            # formatted_traceback = traceback.format_exc()
+            # print(formatted_traceback)
+
+            # Rethrow the exception to propagate it up the call stack
+            raise
+
+        finally:
+            print(f"TimedRobotPyExpectsException hasAssertionError={hasAssertionError}")
+            assert hasAssertionError
+
+
 
 
 class TimedRobotPyDoNotExpectException(TimedRobotPy):
@@ -357,8 +432,37 @@ class TimedRobotPyDoNotExpectException(TimedRobotPy):
             super().startCompetition()
         except AssertionError:
             hasAssertionError = True
-        print(f"TimedRobotPyExpectsException hasAssertionError={hasAssertionError}")
-        assert not hasAssertionError
+            # Print the exception type and message
+            print(f"Exception caught: {type(e).__name__}: {e}")
+
+            # Print the stack trace
+            print("Stack trace:")
+            traceback.print_exc()
+
+            # Alternatively, get the formatted traceback as a string:
+            # formatted_traceback = traceback.format_exc()
+            # print(formatted_traceback)
+
+            # Rethrow the exception to propagate it up the call stack
+            raise
+        except Exception as e:
+            # Print the exception type and message
+            print(f"Exception caught: {type(e).__name__}: {e}")
+
+            # Print the stack trace
+            print("Stack trace:")
+            traceback.print_exc()
+
+            # Alternatively, get the formatted traceback as a string:
+            # formatted_traceback = traceback.format_exc()
+            # print(formatted_traceback)
+
+            # Rethrow the exception to propagate it up the call stack
+            raise
+
+        finally:
+            print(f"TimedRobotPyExpectsException hasAssertionError={hasAssertionError}")
+            assert not hasAssertionError
 
 
 def getFPGATimeInSecondsAsStr():
@@ -528,6 +632,18 @@ class MyRobotTestExitFails(MyRobotDefaultPass):
     def testExit(self):
         assert False
 
+class MyRobotSimulationInitFails(MyRobotDefaultPass):
+    @printEntryAndExit
+    def _simulationInit(self):
+        assert False
+
+
+class MyRobotSimulationPeriodicFails(MyRobotDefaultPass):
+    @printEntryAndExit
+    def _simulationPeriodic(self):
+        assert False
+
+
 
 class ExpectFinished(Enum):
     kNotFinished = 0
@@ -557,15 +673,31 @@ class RobotMode(Enum):
         return (self is not RobotMode.kDisabled) and (self is not RobotMode.kNone)
 
 
+from dataclasses import dataclass, field
+@dataclass()
+class CaseConfiguration:
+    """Class for configuration of Test Cases"""
+    description: str
+    myRobotAddMethods: type
+    timedRobotExpectation: TimedRobotPy
+    robotMode: RobotMode = None
+    expectFinished: ExpectFinished = ExpectFinished.kFinished
+    callSequenceStr: str = None
+
+
 @pytest.fixture(scope="function")
 def myrobot_class(
-    myRobotAddMethods,
-    timedRobotExpectation,
-    _expectFinished,
-    _robotMode,
-    _callSequenceStr,
+    caseConfiguration,
 ) -> type[TimedRobotPy]:
-    class MyRobot(myRobotAddMethods, timedRobotExpectation):
+
+    print(f"\ndescription=\n\n{caseConfiguration.description}\n")
+    print(f"myRobotAddMethods={caseConfiguration.myRobotAddMethods.__name__}")
+    print(f"timedRobotExpectation={caseConfiguration.timedRobotExpectation.__name__}")
+    print(f"robotMode={caseConfiguration.robotMode}")
+    print(f"expectFinished={caseConfiguration.expectFinished}")
+    print(f"callSequenceStr={caseConfiguration.callSequenceStr}\n\n")
+
+    class MyRobot(caseConfiguration.myRobotAddMethods, caseConfiguration.timedRobotExpectation):
 
         @printEntryAndExit
         def startCompetition(self):
@@ -579,47 +711,30 @@ def myrobot_class(
 
 
 @pytest.fixture(scope="function")
-def expect_finished(
-    myRobotAddMethods,
-    timedRobotExpectation,
-    _expectFinished,
-    _robotMode,
-    _callSequenceStr,
-) -> bool:
-    return _expectFinished is ExpectFinished.kFinished
+def expect_finished(caseConfiguration) -> bool:
+    return caseConfiguration.expectFinished is ExpectFinished.kFinished
 
 
 @pytest.fixture(scope="function")
-def robot_mode_fixture(
-    myRobotAddMethods,
-    timedRobotExpectation,
-    _expectFinished,
-    _robotMode,
-    _callSequenceStr,
-) -> RobotMode:
-    return _robotMode
+def robot_mode_fixture(caseConfiguration)-> RobotMode:
+    return caseConfiguration.robotMode
 
 
 @pytest.fixture(scope="function")
-def call_sequence_str(
-    myRobotAddMethods,
-    timedRobotExpectation,
-    _expectFinished,
-    _robotMode,
-    _callSequenceStr,
-) -> str:
-    return _callSequenceStr
+def call_sequence_str(caseConfiguration) -> str:
+    return caseConfiguration.callSequenceStr
 
-
+@pytest.mark.filterwarnings("ignore:Exception in thread")
 @pytest.mark.parametrize(
-    "myRobotAddMethods, timedRobotExpectation, _expectFinished, _robotMode, _callSequenceStr",
+    "caseConfiguration",
     [
-        (
-            MyRobotDefaultPass,
-            TimedRobotPyDoNotExpectException,
-            ExpectFinished.kFinished,
-            RobotMode.kAutonomous,
-            ":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+        CaseConfiguration(
+            description="Robot enters autonomous mode without exceptions",
+            myRobotAddMethods=MyRobotDefaultPass,
+            timedRobotExpectation=TimedRobotPyDoNotExpectException,
+            expectFinished=ExpectFinished.kFinished,
+            robotMode=RobotMode.kAutonomous,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:disabledExit+:disabledExit-"
             ":autonomousInit+:autonomousInit-:autonomousPeriodic+:autonomousPeriodic-"
@@ -628,12 +743,13 @@ def call_sequence_str(
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:",
         ),
-        (
-            MyRobotDefaultPass,
-            TimedRobotPyDoNotExpectException,
-            ExpectFinished.kFinished,
-            RobotMode.kTeleop,
-            ":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+        CaseConfiguration(
+            description="Robot enters teleop mode without exceptions",
+            myRobotAddMethods=MyRobotDefaultPass,
+            timedRobotExpectation=TimedRobotPyDoNotExpectException,
+            expectFinished=ExpectFinished.kFinished,
+            robotMode=RobotMode.kTeleop,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:disabledExit+:disabledExit-"
             ":teleopInit+:teleopInit-:teleopPeriodic+:teleopPeriodic-"
@@ -642,12 +758,13 @@ def call_sequence_str(
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:",
         ),
-        (
-            MyRobotDefaultPass,
-            TimedRobotPyDoNotExpectException,
-            ExpectFinished.kFinished,
-            RobotMode.kTest,
-            ":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+        CaseConfiguration(
+            description="Robot enters test mode without exceptions",
+            myRobotAddMethods=MyRobotDefaultPass,
+            timedRobotExpectation=TimedRobotPyDoNotExpectException,
+            expectFinished=ExpectFinished.kFinished,
+            robotMode=RobotMode.kTest,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:disabledExit+:disabledExit-"
             ":testInit+:testInit-:testPeriodic+:testPeriodic-"
@@ -656,108 +773,173 @@ def call_sequence_str(
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:",
         ),
-        (
-            MyRobotRobotInitFails,
-            TimedRobotPyExpectsException,
-            ExpectFinished.kNotFinished,
-            RobotMode.kAutonomous,
-            ":startCompetition+:robotInit+:startCompetition-:",
+        CaseConfiguration(
+            description="Robot enters autonomous mode, exception in robotInit",
+            myRobotAddMethods=MyRobotRobotInitFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kAutonomous,
+            callSequenceStr=":startCompetition+:robotInit+:",
         ),
-        (
-            MyRobotAutonomousInitFails,
-            TimedRobotPyExpectsException,
-            ExpectFinished.kNotFinished,
-            RobotMode.kAutonomous,
-            ":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+        CaseConfiguration(
+            description="Robot enters autonomous mode, exception in simulationInit",
+            myRobotAddMethods=MyRobotSimulationInitFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kAutonomous,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:",
+        ),
+        CaseConfiguration(
+            description="Robot enters autonomous mode, exception in robotPeriodic",
+            myRobotAddMethods=MyRobotRobotPeriodicFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kAutonomous,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+            ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:"
+        ),
+        CaseConfiguration(
+            description="Robot enters autonomous mode, exception in simulationPeriodic",
+            myRobotAddMethods=MyRobotSimulationPeriodicFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kAutonomous,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+            ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
+            ":_simulationPeriodic+:",
+        ),
+        CaseConfiguration(
+            description="Robot enters autonomous mode, exception in disabledInit",
+            myRobotAddMethods=MyRobotDisabledInitFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kAutonomous,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+            ":disabledInit+:"
+        ),
+        CaseConfiguration(
+            description="Robot enters autonomous mode, exception in disabledPeriodic",
+            myRobotAddMethods=MyRobotDisabledPeriodicFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kAutonomous,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+            ":disabledInit+:disabledInit-:disabledPeriodic+:"
+        ),
+        CaseConfiguration(
+            description="Robot enters autonomous mode, exception in disabledExit",
+            myRobotAddMethods=MyRobotDisabledExitFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kAutonomous,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+            ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
+            ":_simulationPeriodic+:_simulationPeriodic-:disabledExit+:",
+        ),
+        CaseConfiguration(
+            description="Robot enters autonomous mode, exception in autonomousInit",
+            myRobotAddMethods=MyRobotAutonomousInitFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kAutonomous,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:disabledExit+:disabledExit-"
-            ":autonomousInit+:startCompetition-:",
+            ":autonomousInit+:",
         ),
-        (
-            MyRobotAutonomousPeriodicFails,
-            TimedRobotPyExpectsException,
-            ExpectFinished.kNotFinished,
-            RobotMode.kAutonomous,
-            ":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+        CaseConfiguration(
+            description="Robot enters autonomous mode, exception in autonomousPeriodic",
+            myRobotAddMethods=MyRobotAutonomousPeriodicFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kAutonomous,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:disabledExit+:disabledExit-"
-            ":autonomousInit+:autonomousInit-:autonomousPeriodic+:startCompetition-:",
+            ":autonomousInit+:autonomousInit-:autonomousPeriodic+:",
         ),
-        (
-            MyRobotAutonomousExitFails,
-            TimedRobotPyExpectsException,
-            ExpectFinished.kNotFinished,
-            RobotMode.kAutonomous,
-            ":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+        CaseConfiguration(
+            description="Robot enters autonomous mode, exception in autonomousExit",
+            myRobotAddMethods=MyRobotAutonomousExitFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kAutonomous,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:disabledExit+:disabledExit-"
             ":autonomousInit+:autonomousInit-:autonomousPeriodic+:autonomousPeriodic-"
             ":robotPeriodic+:robotPeriodic-:_simulationPeriodic+:_simulationPeriodic-"
-            ":autonomousExit+:startCompetition-:",
+            ":autonomousExit+:",
         ),
-        (
-            MyRobotTeleopInitFails,
-            TimedRobotPyExpectsException,
-            ExpectFinished.kNotFinished,
-            RobotMode.kTeleop,
-            ":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+        CaseConfiguration(
+            description="Robot enters teleop mode, exception in teleopInit",
+            myRobotAddMethods=MyRobotTeleopInitFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kTeleop,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:disabledExit+:disabledExit-"
-            ":teleopInit+:startCompetition-:",
+            ":teleopInit+:",
         ),
-        (
-            MyRobotTeleopPeriodicFails,
-            TimedRobotPyExpectsException,
-            ExpectFinished.kNotFinished,
-            RobotMode.kTeleop,
-            ":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+        CaseConfiguration(
+            description="Robot enters teleop mode, exception in teleopPeriodic",
+            myRobotAddMethods=MyRobotTeleopPeriodicFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kTeleop,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:disabledExit+:disabledExit-"
-            ":teleopInit+:teleopInit-:teleopPeriodic+:startCompetition-:",
+            ":teleopInit+:teleopInit-:teleopPeriodic+:",
         ),
-        (
-            MyRobotTeleopExitFails,
-            TimedRobotPyExpectsException,
-            ExpectFinished.kNotFinished,
-            RobotMode.kTeleop,
-            ":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+        CaseConfiguration(
+            description="Robot enters teleop mode, exception in teleopExit",
+            myRobotAddMethods=MyRobotTeleopExitFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kTeleop,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:disabledExit+:disabledExit-"
             ":teleopInit+:teleopInit-:teleopPeriodic+:teleopPeriodic-"
             ":robotPeriodic+:robotPeriodic-:_simulationPeriodic+:_simulationPeriodic-"
-            ":teleopExit+:startCompetition-:",
+            ":teleopExit+:",
         ),
-        (
-            MyRobotTestInitFails,
-            TimedRobotPyExpectsException,
-            ExpectFinished.kNotFinished,
-            RobotMode.kTest,
-            ":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+        CaseConfiguration(
+            description="Robot enters test mode, exception in testInit",
+            myRobotAddMethods=MyRobotTestInitFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kTest,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:disabledExit+:disabledExit-"
-            ":testInit+:startCompetition-:",
+            ":testInit+:",
         ),
-        (
-            MyRobotTestPeriodicFails,
-            TimedRobotPyExpectsException,
-            ExpectFinished.kNotFinished,
-            RobotMode.kTest,
-            ":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+        CaseConfiguration(
+            description="Robot enters test mode, exception in testPeriodic",
+            myRobotAddMethods=MyRobotTestPeriodicFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kTest,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:disabledExit+:disabledExit-"
-            ":testInit+:testInit-:testPeriodic+:startCompetition-:",
+            ":testInit+:testInit-:testPeriodic+:",
         ),
-        (
-            MyRobotTestExitFails,
-            TimedRobotPyExpectsException,
-            ExpectFinished.kNotFinished,
-            RobotMode.kTest,
-            ":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
+        CaseConfiguration(
+            description="Robot enters test mode, exception in testExit",
+            myRobotAddMethods=MyRobotTestExitFails,
+            timedRobotExpectation=TimedRobotPyExpectsException,
+            expectFinished=ExpectFinished.kNotFinished,
+            robotMode=RobotMode.kTest,
+            callSequenceStr=":startCompetition+:robotInit+:robotInit-:_simulationInit+:_simulationInit-"
             ":disabledInit+:disabledInit-:disabledPeriodic+:disabledPeriodic-:robotPeriodic+:robotPeriodic-"
             ":_simulationPeriodic+:_simulationPeriodic-:disabledExit+:disabledExit-"
             ":testInit+:testInit-:testPeriodic+:testPeriodic-"
             ":robotPeriodic+:robotPeriodic-:_simulationPeriodic+:_simulationPeriodic-"
-            ":testExit+:startCompetition-:",
+            ":testExit+:",
         ),
     ],
 )
@@ -801,14 +983,13 @@ class TestCanThrowExceptions:
 
 
 @pytest.mark.parametrize(
-    "myRobotAddMethods, timedRobotExpectation, _expectFinished, _robotMode, _callSequenceStr",
+    "caseConfiguration",
     [
-        (
-            MyRobotDefaultPass,
-            TimedRobotPyDoNotExpectException,
-            ExpectFinished.kFinished,
-            None,
-            None,
+        CaseConfiguration(
+            description="Robot enters autonomous, disabled, teleop, and test modes.",
+            myRobotAddMethods=MyRobotDefaultPass,
+            timedRobotExpectation=TimedRobotPyDoNotExpectException,
+            expectFinished=ExpectFinished.kFinished,
         ),
     ],
 )
@@ -969,15 +1150,13 @@ class MyRobotAddPeriodic:
 
 
 @pytest.mark.parametrize(
-    "myRobotAddMethods, timedRobotExpectation, _expectFinished, _robotMode, _callSequenceStr",
+    "caseConfiguration",
     [
-        (
-            MyRobotAddPeriodic,
-            TimedRobotDoNotExpectException1msPeriod,
-            # TimedRobotPyDoNotExpectException1msPeriod,
-            ExpectFinished.kFinished,
-            None,
-            None,
+        CaseConfiguration(
+            description="Robot uses addPeriodic to add periodic functions",
+            myRobotAddMethods=MyRobotAddPeriodic,
+            timedRobotExpectation=TimedRobotDoNotExpectException1msPeriod,
+            expectFinished=ExpectFinished.kFinished,
         ),
     ],
 )
