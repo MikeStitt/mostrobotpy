@@ -108,10 +108,7 @@ class _OrderedListSort:
         self._data.sort()
 
     def peek(self) -> Any:
-        if self._data:
-            return self._data[0]
-        else:
-            return None
+        return self._data[0]
 
     def reorderListAfterAChangeInTheFirstElement(self):
         self._data.sort()
@@ -138,10 +135,7 @@ class _OrderedListMin:
         self._data.append(item)
 
     def peek(self) -> Any:
-        if self._data:
-            return min(self._data)
-        else:
-            return None
+        return min(self._data)
 
     def reorderListAfterAChangeInTheFirstElement(self):
         pass
@@ -168,7 +162,7 @@ class _OrderedListHeapq:
         heappush(self._data, item)
 
     def peek(self) -> Any:
-       return self._data[0]
+        return self._data[0]
 
     def reorderListAfterAChangeInTheFirstElement(self):
         _siftup(self._data, 0)
@@ -265,23 +259,6 @@ class TimedRobotPy(_IterativeRobotPy):
             # (really not forever, there is a check for a stop)
             while self._bodyOfMainLoop():
                 pass
-            print("Reached after while self._bodyOfMainLoop(): ", flush=True)
- 
-        except Exception as e:
-            # Print the exception type and message
-            print(f"Exception caught: {type(e).__name__}: {e}")
-
-            # Print the stack trace
-            print("Stack trace:")
-            traceback.print_exc()
-
-            # Alternatively, get the formatted traceback as a string:
-            # formatted_traceback = traceback.format_exc()
-            # print(formatted_traceback)
-
-            # Rethrow the exception to propagate it up the call stack
-            raise
-
         finally:
             print("Reached after finally: self._stopNotifier(): ", flush=True)
             # pytests hang on PC when we don't force a call to self._stopNotifier()
@@ -339,6 +316,8 @@ class TimedRobotPy(_IterativeRobotPy):
                 callback := self._callbacks.peek()
         ).expirationUs <= _getFPGATime():
             self._runCallbackAtHeadOfListAndReschedule(callback)
+
+        return keepGoing
 
     def _runCallbackAtHeadOfListAndReschedule(self, callback) -> None:
         # The callback.func() may have added more callbacks to self._callbacks,
